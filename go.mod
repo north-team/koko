@@ -23,6 +23,7 @@ require (
 	github.com/leonelquinteros/gotext v1.4.0
 	github.com/mattn/go-runewidth v0.0.4 // indirect
 	github.com/mediocregopher/radix/v3 v3.4.2
+	github.com/north-team/huawei-obs-sdk-go v0.0.0-20200923095634-5e9ea55c8cd1
 	github.com/olekukonko/tablewriter v0.0.1
 	github.com/pires/go-proxyproto v0.0.0-20190615163442-2c19fd512994
 	github.com/pkg/errors v0.8.1

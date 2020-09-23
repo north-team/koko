@@ -81,6 +81,30 @@ func NewReplayStorage() ReplayStorage {
 			AccessKey: accessKey,
 			SecretKey: secretKey,
 		}
+	case "obs":
+		var endpoint string
+		var bucket string
+		var accessKey string
+		var secretKey string
+
+		if value, ok := cf["ENDPOINT"].(string); ok {
+			endpoint = value
+		}
+		if value, ok := cf["BUCKET"].(string); ok {
+			bucket = value
+		}
+		if value, ok := cf["ACCESS_KEY"].(string); ok {
+			accessKey = value
+		}
+		if value, ok := cf["SECRET_KEY"].(string); ok {
+			secretKey = value
+		}
+		return storage.OBSReplayStorage{
+			Endpoint:  endpoint,
+			Bucket:    bucket,
+			AccessKey: accessKey,
+			SecretKey: secretKey,
+		}
 	case "s3", "swift":
 		var region string
 		var endpoint string
