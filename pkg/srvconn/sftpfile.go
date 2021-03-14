@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/jumpserver/koko/pkg/ftplogutil"
+	uuid "github.com/satori/go.uuid"
 	"os"
 	"path/filepath"
 	"strings"
@@ -225,6 +227,7 @@ type AssetDir struct {
 	folderName string
 	modeTime   time.Time
 	addr       string
+	ftpLog     *model.FTPLog
 
 	suMaps map[string]*model.SystemUser
 
@@ -286,27 +289,27 @@ func (ad *AssetDir) loadSystemUsers() {
 	})
 }
 
-func (ad *AssetDir) Create(path string) (*sftp.File, error) {
+func (ad *AssetDir) Create(path string) (*sftp.File, *model.FTPLog, error) {
 	pathData := ad.parsePath(path)
 	folderName, ok := ad.IsUniqueSu()
 	if !ok {
 		if len(pathData) == 1 && pathData[0] == "" {
-			return nil, sftp.ErrSshFxPermissionDenied
+			return nil, nil, sftp.ErrSshFxPermissionDenied
 		}
 		folderName = pathData[0]
 		pathData = pathData[1:]
 	}
 	su, ok := ad.suMaps[folderName]
 	if !ok {
-		return nil, errNoSystemUser
+		return nil, nil, errNoSystemUser
 	}
 	if !ad.validatePermission(su, model.UploadAction) {
-		return nil, sftp.ErrSshFxPermissionDenied
+		return nil, nil, sftp.ErrSshFxPermissionDenied
 	}
 
 	con, realPath := ad.GetSFTPAndRealPath(su, strings.Join(pathData, "/"))
 	if con == nil {
-		return nil, sftp.ErrSshFxConnectionLost
+		return nil, nil, sftp.ErrSshFxConnectionLost
 	}
 	sf, err := con.client.Create(realPath)
 	filename := realPath
@@ -315,8 +318,9 @@ func (ad *AssetDir) Create(path string) (*sftp.File, error) {
 	if err == nil {
 		isSuccess = true
 	}
-	ad.CreateFTPLog(su, operate, filename, isSuccess)
-	return sf, err
+	ftpLog := ad.CreateFTPLog(su, operate, filename, isSuccess)
+
+	return sf, ftpLog, err
 }
 
 func (ad *AssetDir) MkdirAll(path string) (err error) {
@@ -348,6 +352,7 @@ func (ad *AssetDir) MkdirAll(path string) (err error) {
 	if err == nil {
 		isSuccess = true
 	}
+	// 待验证！！！
 	ad.CreateFTPLog(su, operate, filename, isSuccess)
 	return
 }
@@ -374,13 +379,33 @@ func (ad *AssetDir) Open(path string) (*sftp.File, error) {
 		return nil, sftp.ErrSshFxConnectionLost
 	}
 	sf, err := con.client.Open(realPath)
+	sf2, err2 := con.client.Open(realPath)
 	filename := realPath
 	isSuccess := false
 	operate := model.OperateDownaload
-	if err == nil {
+	if err == nil && err2 == nil {
 		isSuccess = true
 	}
-	ad.CreateFTPLog(su, operate, filename, isSuccess)
+
+	// 待验证！！！
+	ftpLog := ad.CreateFTPLog(su, operate, filename, isSuccess)
+	if !isSuccess && err2 == nil {
+		sf2.Close()
+	}
+	if !isSuccess && err == nil {
+		sf.Close()
+	}
+	if err != nil {
+		return sf, err
+	}
+
+	// 异步记录
+	go func() {
+		_, err := ftplogutil.CacheFileLocally(ftpLog, sf)
+		if err != nil {
+			service.FTPLogFailed(ftpLog.Id)
+		}
+	}()
 	return sf, err
 }
 
@@ -476,6 +501,7 @@ func (ad *AssetDir) RemoveDirectory(path string) (err error) {
 	if err == nil {
 		isSuccess = true
 	}
+	// 待验证！！！
 	ad.CreateFTPLog(su, operate, filename, isSuccess)
 	return
 }
@@ -511,6 +537,7 @@ func (ad *AssetDir) Rename(oldNamePath, newNamePath string) (err error) {
 	if err == nil {
 		isSuccess = true
 	}
+	// 待验证！！！
 	ad.CreateFTPLog(su, operate, filename, isSuccess)
 	return
 }
@@ -544,6 +571,7 @@ func (ad *AssetDir) Remove(path string) (err error) {
 	if err == nil {
 		isSuccess = true
 	}
+	// 待验证！！！
 	ad.CreateFTPLog(su, operate, filename, isSuccess)
 	return
 }
@@ -605,6 +633,7 @@ func (ad *AssetDir) Symlink(oldNamePath, newNamePath string) (err error) {
 	if err == nil {
 		isSuccess = true
 	}
+	// 待验证！！！
 	ad.CreateFTPLog(su, operate, filename, isSuccess)
 	return
 }
@@ -803,19 +832,22 @@ func (ad *AssetDir) close() {
 	}
 }
 
-func (ad *AssetDir) CreateFTPLog(su *model.SystemUser, operate, filename string, isSuccess bool) {
+func (ad *AssetDir) CreateFTPLog(su *model.SystemUser, operate, filename string, isSuccess bool) *model.FTPLog {
 	data := model.FTPLog{
-		User:       fmt.Sprintf("%s(%s)", ad.user.Name, ad.user.Username),
-		Hostname:   ad.asset.Hostname,
-		OrgID:      ad.asset.OrgID,
-		SystemUser: su.Name,
-		RemoteAddr: ad.addr,
-		Operate:    operate,
-		Path:       filename,
-		DataStart:  common.CurrentUTCTime(),
-		IsSuccess:  isSuccess,
+		Id:            uuid.NewV4().String(),
+		User:          fmt.Sprintf("%s(%s)", ad.user.Name, ad.user.Username),
+		Hostname:      ad.asset.Hostname,
+		OrgID:         ad.asset.OrgID,
+		SystemUser:    su.Name,
+		RemoteAddr:    ad.addr,
+		Operate:       operate,
+		Path:          filename,
+		DataStart:     common.CurrentUTCTime(),
+		IsSuccess:     isSuccess,
+		HasFileRecord: false,
 	}
 	ad.logChan <- &data
+	return &data
 }
 
 type SftpConn struct {

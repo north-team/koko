@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"github.com/jumpserver/koko/pkg/ftplogutil"
 	"io"
 	"net"
 	"os"
@@ -100,19 +101,35 @@ func (fs *sftpHandler) Filecmd(r *sftp.Request) (err error) {
 }
 
 func (fs *sftpHandler) Filewrite(r *sftp.Request) (io.WriterAt, error) {
+	// 待验证！！！
 	logger.Debug("File write: ", r.Filepath)
-	f, err := fs.Create(r.Filepath)
+	f, ftpLog, err := fs.Create(r.Filepath)
 	if err != nil {
 		return nil, err
 	}
+	var copyFd *os.File
+	path, err := ftplogutil.GetFileCachePath(ftpLog)
+	if err != nil {
+		return nil, err
+	}
+
+	copyFd, err = os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		return nil, err
+	}
+
+	// 文件传输完成后执行 ↓
 	go func() {
 		<-r.Context().Done()
+		_ = copyFd.Close()
+		ftplogutil.SendNotifyFileReady(*ftpLog)
 		if err := f.Close(); err != nil {
 			logger.Errorf("Remote sftp file %s close err: %s", r.Filepath, err)
 		}
 		logger.Infof("Sftp file write %s done", r.Filepath)
 	}()
-	return NewWriterAt(f), err
+
+	return NewWriterAt(f, ftpLog, copyFd), err
 }
 
 func (fs *sftpHandler) Fileread(r *sftp.Request) (io.ReaderAt, error) {
@@ -155,8 +172,8 @@ func (f listerat) ListAt(ls []os.FileInfo, offset int64) (int, error) {
 	return n, nil
 }
 
-func NewWriterAt(f *sftp.File) io.WriterAt {
-	return &clientReadWritAt{f: f, mu: new(sync.RWMutex)}
+func NewWriterAt(f *sftp.File, ftpLog *model.FTPLog, copyFd *os.File) io.WriterAt {
+	return &clientReadWritAt{f: f, mu: new(sync.RWMutex), ftpLog: ftpLog, copyFd: copyFd}
 }
 
 func NewReaderAt(f *sftp.File, fi os.FileInfo) io.ReaderAt {
@@ -164,15 +181,22 @@ func NewReaderAt(f *sftp.File, fi os.FileInfo) io.ReaderAt {
 }
 
 type clientReadWritAt struct {
-	f  *sftp.File
-	mu *sync.RWMutex
-	fi os.FileInfo
+	f      *sftp.File
+	mu     *sync.RWMutex
+	fi     os.FileInfo
+	ftpLog *model.FTPLog
+	copyFd *os.File
 }
 
 func (c *clientReadWritAt) WriteAt(p []byte, off int64) (n int, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	_, _ = c.copyFd.Seek(off, 0)
+	if _, err = c.copyFd.Write(p); err != nil {
+		return 0, err
+	}
 	_, _ = c.f.Seek(off, 0)
+
 	return c.f.Write(p)
 }
 
