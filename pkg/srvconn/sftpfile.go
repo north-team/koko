@@ -116,6 +116,10 @@ func (nd *NodeDir) loadNodeAsset(uSftp *UserSftpConn) {
 		nodeTrees := service.GetUserNodeTreeWithAsset(uSftp.User.ID, nd.node.Key, "1")
 		dirs := map[string]os.FileInfo{}
 		for _, item := range nodeTrees {
+			if item.ChkDisabled {
+				// 资产被禁用，不显示
+				continue
+			}
 			typeName, ok := item.Meta["type"].(string)
 			if !ok {
 				continue
@@ -272,7 +276,7 @@ func (ad *AssetDir) loadSystemUsers() {
 		for i := 0; i < len(SystemUsers); i++ {
 			if SystemUsers[i].Protocol == "ssh" {
 				ok := true
-				folderName := SystemUsers[i].Name
+				folderName := strings.ReplaceAll(SystemUsers[i].Name, "/", "_")
 				for ok {
 					if _, ok = sus[folderName]; ok {
 						folderName = fmt.Sprintf("%s_", folderName)
@@ -382,7 +386,7 @@ func (ad *AssetDir) Open(path string) (*sftp.File, error) {
 	sf2, err2 := con.client.Open(realPath)
 	filename := realPath
 	isSuccess := false
-	operate := model.OperateDownaload
+	operate := model.OperateDownload
 	if err == nil && err2 == nil {
 		isSuccess = true
 	}
