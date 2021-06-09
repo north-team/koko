@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/jumpserver/koko/pkg/logger"
 	"github.com/jumpserver/koko/pkg/model"
 	"github.com/jumpserver/koko/pkg/service"
+	"github.com/jumpserver/koko/pkg/utils"
 )
 
 type dataSource string
@@ -63,6 +65,45 @@ func (u *UserSelectHandler) SetSelectType(s selectType) {
 		u.h.term.SetPrompt("[DB]> ")
 	}
 	u.currentType = s
+	u.AutoCompletion()
+}
+
+func (u *UserSelectHandler) AutoCompletion() {
+	assets := u.Retrieve(0, 0, "")
+	suggests := make([]string, 0, len(assets))
+
+	for _, v := range assets {
+		switch u.currentType {
+		case TypeAsset, TypeNodeAsset:
+			suggests = append(suggests, v["hostname"].(string))
+		default:
+			suggests = append(suggests, v["name"].(string))
+		}
+	}
+
+	sort.Strings(suggests)
+	u.h.term.AutoCompleteCallback = func(line string, pos int, key rune) (newLine string, newPos int, ok bool) {
+		if key == 9 {
+			termWidth, _ := u.h.term.GetSize()
+			if len(line) >= 1 {
+				sugs := utils.FilterPrefix(suggests, line)
+				if len(sugs) >= 1 {
+					commonPrefix := utils.LongestCommonPrefix(sugs)
+					switch u.currentType {
+					case TypeAsset, TypeNodeAsset:
+						fmt.Fprintf(u.h.term, "%s%s\n%s\n", "[Host]> ", line, utils.Pretty(sugs, termWidth))
+					case TypeK8s:
+						fmt.Fprintf(u.h.term, "%s%s\n%s\n", "[K8S]> ", line, utils.Pretty(sugs, termWidth))
+					case TypeMySQL:
+						fmt.Fprintf(u.h.term, "%s%s\n%s\n", "[DB]> ", line, utils.Pretty(sugs, termWidth))
+					}
+					return commonPrefix, len(commonPrefix), true
+				}
+			}
+		}
+
+		return newLine, newPos, false
+	}
 }
 
 func (u *UserSelectHandler) SetNode(node model.Node) {
@@ -89,7 +130,7 @@ func (u *UserSelectHandler) MoveNextPage() {
 	u.DisplayCurrentResult()
 }
 
-func (u *UserSelectHandler) MovePrePage() () {
+func (u *UserSelectHandler) MovePrePage() {
 	if u.HasPrev() {
 		offset := u.CurrentOffSet()
 		newPageSize := getPageSize(u.h.term)
@@ -102,21 +143,21 @@ func (u *UserSelectHandler) MovePrePage() () {
 	u.DisplayCurrentResult()
 }
 
-func (u *UserSelectHandler) Search(key string) () {
+func (u *UserSelectHandler) Search(key string) {
 	newPageSize := getPageSize(u.h.term)
 	u.currentResult = u.Retrieve(newPageSize, 0, key)
 	u.searchKeys = []string{key}
 	u.DisplayCurrentResult()
 }
 
-func (u *UserSelectHandler) SearchAgain(key string) () {
+func (u *UserSelectHandler) SearchAgain(key string) {
 	u.searchKeys = append(u.searchKeys, key)
 	newPageSize := getPageSize(u.h.term)
 	u.currentResult = u.Retrieve(newPageSize, 0, u.searchKeys...)
 	u.DisplayCurrentResult()
 }
 
-func (u *UserSelectHandler) SearchOrProxy(key string) () {
+func (u *UserSelectHandler) SearchOrProxy(key string) {
 	if indexNum, err := strconv.Atoi(key); err == nil && len(u.currentResult) > 0 {
 		if indexNum > 0 && indexNum <= len(u.currentResult) {
 			u.Proxy(u.currentResult[indexNum-1])
