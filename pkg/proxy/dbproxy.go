@@ -18,6 +18,10 @@ import (
 	"github.com/jumpserver/koko/pkg/utils"
 )
 
+const (
+	DB2 = "db2"
+)
+
 var _ proxyEngine = (*DBProxyServer)(nil)
 
 type DBProxyServer struct {
@@ -83,6 +87,8 @@ func (p *DBProxyServer) checkProtocolClientInstalled() bool {
 	switch strings.ToLower(p.Database.TypeName) {
 	case "mysql":
 		return IsInstalledMysqlClient()
+	case "db2":
+		return IsInstalledDB2Client()
 	}
 
 	return false
@@ -97,6 +103,7 @@ func (p *DBProxyServer) validatePermission() bool {
 
 // getSSHConn 获取ssh连接
 func (p *DBProxyServer) getMysqlConn(localTunnelAddr *net.TCPAddr) (srvConn *srvconn.MySQLConn, err error) {
+	logger.Info("Connecting to MySQL database...")
 	host := p.Database.Attrs.Host
 	port := p.Database.Attrs.Port
 	if localTunnelAddr != nil {
@@ -104,6 +111,30 @@ func (p *DBProxyServer) getMysqlConn(localTunnelAddr *net.TCPAddr) (srvConn *srv
 		port = localTunnelAddr.Port
 	}
 	srvConn = srvconn.NewMySQLConnection(
+		srvconn.SqlHost(host),
+		srvconn.SqlPort(port),
+		srvconn.SqlUsername(p.SystemUser.Username),
+		srvconn.SqlPassword(p.SystemUser.Password),
+		srvconn.SqlDBName(p.Database.Attrs.Database),
+	)
+	win := srvconn.Windows{
+		Width:  p.UserConn.Pty().Window.Width,
+		Height: p.UserConn.Pty().Window.Height,
+	}
+	err = srvConn.Connect(win)
+	return
+}
+
+// getSSHConn 获取ssh连接db2
+func (p *DBProxyServer) getDB2Conn(localTunnelAddr *net.TCPAddr) (srvConn *srvconn.DB2Conn, err error) {
+	logger.Info("Connecting to DB2 database...")
+	host := p.Database.Attrs.Host
+	port := p.Database.Attrs.Port
+	if localTunnelAddr != nil {
+		host = "127.0.0.1"
+		port = localTunnelAddr.Port
+	}
+	srvConn = srvconn.NewDB2Connection(
 		srvconn.SqlHost(host),
 		srvconn.SqlPort(port),
 		srvconn.SqlUsername(p.SystemUser.Username),
@@ -126,6 +157,9 @@ func (p *DBProxyServer) getServerConn(localTunnelAddr *net.TCPAddr) (srvConn srv
 		close(done)
 	}()
 	go p.sendConnectingMsg(done, config.GetConf().SSHTimeout*time.Second)
+	if p.Database.TypeName == DB2 {
+		return p.getDB2Conn(localTunnelAddr)
+	}
 	return p.getMysqlConn(localTunnelAddr)
 }
 
@@ -354,4 +388,18 @@ func IsInstalledMysqlClient() bool {
 	}
 	logger.Errorf("Check mysql client installed failed: %s", out)
 	return false
+}
+
+func IsInstalledDB2Client() bool {
+	checkLine := "su - db2inst1"
+	cmd := exec.Command("bash", "-c", checkLine)
+	out, err := cmd.CombinedOutput()
+	if err != nil && len(out) == 0 {
+		logger.Errorf("Check mysql client installed failed: %s", err)
+		return false
+	}
+	if bytes.HasPrefix(out, []byte("su:")) {
+		return false
+	}
+	return true
 }

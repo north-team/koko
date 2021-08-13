@@ -34,6 +34,12 @@ RUN apt-get update && apt-get install -y --allow-unauthenticated --no-install-re
     && apt-get install -y --no-install-recommends gdb ca-certificates jq iproute2 less bash-completion unzip sysstat acl net-tools iputils-ping telnet dnsutils wget vim git \
     && rm -rf /var/lib/apt/lists/*
 
+WORKDIR /opt/koko
+ADD https://f2c-north-rel.oss-cn-qingdao.aliyuncs.com/2.0/north/jumpserver/v11.5.5_linuxx64_server_dec.tar.gz .
+COPY ./db2ese_t.lic ./db2ese_t.lic
+RUN tar -zxf v11.5.5_linuxx64_server_dec.tar.gz && rm -f v11.5.5_linuxx64_server_dec.tar.gz
+RUN cd server_dec && sh install.sh && sh userGroupAdd.sh
+
 ENV TZ Asia/Shanghai
 WORKDIR /opt/koko/
 COPY --from=stage-build /opt/koko/release/koko /opt/koko
