@@ -1,6 +1,7 @@
 package recorderstorage
 
 import (
+	"errors"
 	"path/filepath"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 
 type ServerStorage struct {
 	StorageType string
+	FileType    string
 	JmsService  *service.JMService
 }
 
@@ -18,8 +20,15 @@ func (s ServerStorage) BulkSave(commands []*model.Command) (err error) {
 }
 
 func (s ServerStorage) Upload(gZipFilePath, target string) (err error) {
-	sessionID := strings.Split(filepath.Base(gZipFilePath), ".")[0]
-	return s.JmsService.Upload(sessionID, gZipFilePath)
+	id := strings.Split(filepath.Base(gZipFilePath), ".")[0]
+	switch s.FileType {
+	case "replay":
+		return s.JmsService.Upload(id, gZipFilePath)
+	case "file":
+		return s.JmsService.PushFTPLogFile(id, gZipFilePath)
+	default:
+		return errors.New("cannot match FileType of ServerStorage")
+	}
 }
 
 func (s ServerStorage) TypeName() string {

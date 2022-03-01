@@ -54,6 +54,7 @@ type Config struct {
 	KeyFolderPath     string
 	AccessKeyFilePath string
 	ReplayFolderPath  string
+	FilesFolderPath   string
 }
 
 func (c *Config) EnsureConfigValid() {
@@ -85,6 +86,7 @@ func getDefaultConfig() Config {
 	rootPath := getPwdDirPath()
 	dataFolderPath := filepath.Join(rootPath, "data")
 	replayFolderPath := filepath.Join(dataFolderPath, "replays")
+	filesFolderPath := filepath.Join(dataFolderPath, "files")
 	LogDirPath := filepath.Join(dataFolderPath, "logs")
 	keyFolderPath := filepath.Join(dataFolderPath, "keys")
 	accessKeyFilePath := filepath.Join(keyFolderPath, ".access_key")
@@ -110,6 +112,7 @@ func getDefaultConfig() Config {
 		LogDirPath:        LogDirPath,
 		KeyFolderPath:     keyFolderPath,
 		ReplayFolderPath:  replayFolderPath,
+		FilesFolderPath:   filesFolderPath,
 
 		Comment:             "KOKO",
 		UploadFailedReplay:  true,

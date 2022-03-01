@@ -10,6 +10,7 @@ import (
 
 	"github.com/pkg/sftp"
 
+	"github.com/jumpserver/koko/pkg/ftplogutil"
 	"github.com/jumpserver/koko/pkg/jms-sdk-go/model"
 	"github.com/jumpserver/koko/pkg/jms-sdk-go/service"
 	"github.com/jumpserver/koko/pkg/logger"
@@ -151,20 +152,20 @@ func (u *UserSftpConn) Symlink(oldNamePath, newNamePath string) (err error) {
 	return sftp.ErrSshFxPermissionDenied
 }
 
-func (u *UserSftpConn) Create(path string) (*sftp.File, error) {
+func (u *UserSftpConn) Create(path string) (*sftp.File, *model.FTPLog, error) {
 	fi, restPath := u.ParsePath(path)
 	if _, ok := fi.(*UserSftpConn); ok {
-		return nil, sftp.ErrSshFxPermissionDenied
+		return nil, nil, sftp.ErrSshFxPermissionDenied
 	}
 
 	if _, ok := fi.(*NodeDir); ok {
-		return nil, errNoSelectAsset
+		return nil, nil, errNoSelectAsset
 	}
 	if assetDir, ok := fi.(*AssetDir); ok {
 		return assetDir.Create(restPath)
 	}
 
-	return nil, errNoSelectAsset
+	return nil, nil, errNoSelectAsset
 }
 
 func (u *UserSftpConn) Open(path string) (*sftp.File, error) {
@@ -369,6 +370,7 @@ func (u *UserSftpConn) loopPushFTPLog() {
 		data := ftpLogList[len(ftpLogList)-1]
 		err = u.jmsService.CreateFileOperationLog(*data)
 		if err == nil {
+			ftplogutil.SendNotifyFtpLog(*data)
 			ftpLogList = ftpLogList[:len(ftpLogList)-1]
 			maxRetry = 0
 			continue

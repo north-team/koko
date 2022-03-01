@@ -5,11 +5,46 @@ import (
 
 	"github.com/jumpserver/koko/pkg/jms-sdk-go/common"
 	"github.com/jumpserver/koko/pkg/jms-sdk-go/model"
+	"github.com/jumpserver/koko/pkg/logger"
 )
 
 func (s *JMService) Upload(sessionID, gZipFile string) error {
 	version := model.ParseReplayVersion(gZipFile, model.Version3)
 	return s.UploadReplay(sessionID, gZipFile, version)
+}
+
+func (s *JMService) PushFTPLogFile(sessionID, gZipFile string) (err error) {
+	var res map[string]interface{}
+	url := fmt.Sprintf(FTPLogFileURL, sessionID)
+	err = s.authClient.UploadFile(url, gZipFile, &res)
+	if err != nil {
+		logger.Error(err)
+	}
+	return
+}
+
+func (s *JMService) FinishFTPLogFileUpload(sid string) bool {
+	var res map[string]interface{}
+	data := map[string]bool{"has_file_record": true}
+	Url := fmt.Sprintf(FTPLogUpdateURL, sid)
+	_, err := s.authClient.Patch(Url, data, &res)
+	if err != nil {
+		logger.Error(err)
+		return false
+	}
+	return true
+}
+
+func (s *JMService) FTPLogFailed(sid string) bool {
+	var res map[string]interface{}
+	data := map[string]bool{"is_success": false}
+	Url := fmt.Sprintf(FTPLogUpdateURL, sid)
+	_, err := s.authClient.Patch(Url, data, &res)
+	if err != nil {
+		logger.Error(err)
+		return false
+	}
+	return true
 }
 
 func (s *JMService) UploadReplay(sid, gZipFile string, version model.ReplayVersion) error {

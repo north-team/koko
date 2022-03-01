@@ -13,6 +13,7 @@ import (
 	"github.com/jumpserver/koko/pkg/httpd"
 	"github.com/jumpserver/koko/pkg/i18n"
 	"github.com/jumpserver/koko/pkg/logger"
+	"github.com/jumpserver/koko/pkg/proxy"
 	"github.com/jumpserver/koko/pkg/sshd"
 
 	"github.com/jumpserver/koko/pkg/jms-sdk-go/model"
@@ -70,11 +71,13 @@ func bootstrap() {
 	i18n.Initial()
 	logger.Initial()
 	exchange.Initial()
+	proxy.Initial()
 }
 
 func runTasks(jmsService *service.JMService) {
 	if config.GetConf().UploadFailedReplay {
 		go uploadRemainReplay(jmsService)
+		go uploadRemainFtpLogFile(jmsService)
 	}
 	go keepHeartbeat(jmsService)
 }
