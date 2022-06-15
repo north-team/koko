@@ -211,16 +211,23 @@ func (opt *sqlOption) CommandArgs() []string {
 }
 
 func (opt *sqlOption) Envs() []string {
+	var nodename string
+	if len(opt.DBName) > 8 {
+		nodename = opt.DBName[:8]
+	} else {
+		nodename = opt.DBName
+	}
 	extraArgs := "--auto-rehash"
 	if opt.disableMySQLAutoRehash {
 		extraArgs = "--no-auto-rehash"
 	}
-	envs := make([]string, 0, 6)
+	envs := make([]string, 0, 7)
 	envs = append(envs, fmt.Sprintf("USERNAME=%s", opt.Username))
 	envs = append(envs, fmt.Sprintf("HOSTNAME=%s", opt.Host))
 	envs = append(envs, fmt.Sprintf("PORT=%d", opt.Port))
 	envs = append(envs, fmt.Sprintf("DATABASE=%s", opt.DBName))
 	envs = append(envs, fmt.Sprintf("EXTRAARGS=%s", extraArgs))
+	envs = append(envs, fmt.Sprintf("NODENAME=%s", nodename))
 	return envs
 }
 

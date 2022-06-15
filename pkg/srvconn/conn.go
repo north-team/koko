@@ -32,6 +32,7 @@ const (
 	ProtocolK8s    = "k8s"
 
 	ProtocolMySQL     = "mysql"
+	ProtocolDB2       = "db2"
 	ProtocolMariadb   = "mariadb"
 	ProtocolSQLServer = "sqlserver"
 	ProtocolRedis     = "redis"
@@ -64,6 +65,7 @@ var supportedMap = map[string]supportedChecker{
 	ProtocolRedis:     redisSupported,
 	ProtocolMongoDB:   mongoDBSupported,
 	ProtocolPostgreSQL:   postgreSQLSupported,
+	ProtocolDB2:       DB2Supported,
 }
 
 func IsSupportedProtocol(p string) error {
@@ -145,6 +147,10 @@ func sqlServerSupported() error {
 		return nil
 	}
 	return ErrSQLServerClient
+}
+
+func DB2Supported() error {
+	return nil
 }
 
 func postgreSQLSupported() error {
