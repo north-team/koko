@@ -12,6 +12,7 @@ import (
 	"github.com/LeeEirc/elfinder"
 	"github.com/pkg/sftp"
 
+	"github.com/jumpserver/koko/pkg/ftplogutil"
 	"github.com/jumpserver/koko/pkg/jms-sdk-go/model"
 	"github.com/jumpserver/koko/pkg/jms-sdk-go/service"
 	"github.com/jumpserver/koko/pkg/logger"
@@ -47,6 +48,7 @@ func NewUserVolume(jmsService *service.JMService, user *model.User, addr, hostId
 		Homename:      homename,
 		basePath:      basePath,
 		chunkFilesMap: make(map[int]*sftp.File),
+		ftpLogMap:     make(map[int]*model.FTPLog),
 		lock:          new(sync.Mutex),
 	}
 	return uVolume
@@ -59,6 +61,7 @@ type UserVolume struct {
 	basePath string
 
 	chunkFilesMap map[int]*sftp.File
+	ftpLogMap     map[int]*model.FTPLog
 	lock          *sync.Mutex
 }
 
@@ -177,13 +180,23 @@ func (u *UserVolume) UploadFile(dirPath, uploadPath, filename string, reader io.
 	}
 	logger.Debug("Volume upload file path: ", path, " ", filename, " ", uploadPath)
 	var rest elfinder.FileDir
-	fd, err := u.UserSftp.Create(filepath.Join(u.basePath, path))
+	fd, ftpLogId, err := u.UserSftp.Create(filepath.Join(u.basePath, path))
 	if err != nil {
 		return rest, err
 	}
 	defer fd.Close()
 
-	_, err = io.Copy(fd, reader)
+	localPath, err := ftplogutil.CacheFileLocally(ftpLogId, reader)
+	if err != nil {
+		return rest, err
+	}
+	localDst, err := os.Open(localPath)
+	if err != nil {
+		return rest, err
+	}
+	defer localDst.Close()
+
+	_, err = io.Copy(fd, localDst)
 	if err != nil {
 		return rest, err
 	}
@@ -193,8 +206,11 @@ func (u *UserVolume) UploadFile(dirPath, uploadPath, filename string, reader io.
 func (u *UserVolume) UploadChunk(cid int, dirPath, uploadPath, filename string, rangeData elfinder.ChunkRange, reader io.Reader) error {
 	var err error
 	var path string
+	var ftpLog *model.FTPLog
+
 	u.lock.Lock()
 	fd, ok := u.chunkFilesMap[cid]
+	ftpLog, ok = u.ftpLogMap[cid]
 	u.lock.Unlock()
 	if !ok {
 		switch {
@@ -206,7 +222,7 @@ func (u *UserVolume) UploadChunk(cid int, dirPath, uploadPath, filename string, 
 			path = filepath.Join(dirPath, filename)
 
 		}
-		fd, err = u.UserSftp.Create(filepath.Join(u.basePath, path))
+		fd, ftpLog, err = u.UserSftp.Create(filepath.Join(u.basePath, path))
 		if err != nil {
 			return err
 		}
@@ -216,9 +232,28 @@ func (u *UserVolume) UploadChunk(cid int, dirPath, uploadPath, filename string, 
 		}
 		u.lock.Lock()
 		u.chunkFilesMap[cid] = fd
+		u.ftpLogMap[cid] = ftpLog
 		u.lock.Unlock()
 	}
-	_, err = io.Copy(fd, reader)
+
+	tmpChunkFilePath, err := ftplogutil.CacheChunkFileLocally(ftpLog, reader)
+	if err != nil {
+		return err
+	}
+
+	tmpChunkFile, err := os.Open(tmpChunkFilePath)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.Copy(fd, tmpChunkFile)
+	defer func() {
+		err := ftplogutil.RemoveTmpChunkFile(ftpLog)
+		if err != nil {
+			logger.Errorf("error delete tmp chunk file: %s, err: %s", tmpChunkFilePath, err)
+		}
+	}()
+
 	if err != nil {
 		_ = fd.Close()
 		u.lock.Lock()
@@ -243,7 +278,9 @@ func (u *UserVolume) MergeChunk(cid, total int, dirPath, uploadPath, filename st
 	u.lock.Lock()
 	if fd, ok := u.chunkFilesMap[cid]; ok {
 		_ = fd.Close()
+		ftplogutil.SendNotifyFileReady(*u.ftpLogMap[cid])
 		delete(u.chunkFilesMap, cid)
+		delete(u.ftpLogMap, cid)
 	}
 	u.lock.Unlock()
 	return u.Info(path)
@@ -265,7 +302,7 @@ func (u *UserVolume) MakeFile(dir, newFilename string) (elfinder.FileDir, error)
 
 	path := filepath.Join(dir, newFilename)
 	var rest elfinder.FileDir
-	fd, err := u.UserSftp.Create(filepath.Join(u.basePath, path))
+	fd, _, err := u.UserSftp.Create(filepath.Join(u.basePath, path))
 	if err != nil {
 		return rest, err
 	}
@@ -310,12 +347,18 @@ func (u *UserVolume) Paste(dir, filename, suffix string, reader io.ReadCloser) (
 	if err == nil {
 		path += suffix
 	}
-	fd, err := u.UserSftp.Create(filepath.Join(u.basePath, path))
+	fd, ftpLogId, err := u.UserSftp.Create(filepath.Join(u.basePath, path))
 	logger.Debug("volume paste: ", path, err)
 	if err != nil {
 		return rest, err
 	}
 	defer fd.Close()
+
+	_, err = ftplogutil.CacheFileLocally(ftpLogId, reader)
+	if err != nil {
+		return rest, err
+	}
+
 	_, err = io.Copy(fd, reader)
 	if err != nil {
 		return rest, err

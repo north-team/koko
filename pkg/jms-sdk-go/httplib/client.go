@@ -131,7 +131,7 @@ func (c *Client) parseQueryUrl(reqUrl string, params []map[string]string) string
 
 func (c *Client) parseUrl(reqUrl string, params []map[string]string) string {
 	reqUrl = c.parseQueryUrl(reqUrl, params)
-	if c.baseUrl != "" {
+	if c.baseUrl != "" && !strings.HasPrefix(reqUrl, "http") {
 		reqUrl = strings.TrimSuffix(c.baseUrl, "/") + reqUrl
 	}
 	return reqUrl

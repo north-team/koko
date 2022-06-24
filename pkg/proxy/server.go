@@ -497,7 +497,7 @@ func (s *Server) GetReplayRecorder() *ReplyRecorder {
 		TimeStamp: time.Now(),
 	}
 	recorder, err := NewReplayRecord(s.ID, s.jmsService,
-		NewReplayStorage(s.jmsService, s.terminalConf),
+		NewReplayStorage("replay", s.jmsService, s.terminalConf),
 		info)
 	if err != nil {
 		logger.Error(err)

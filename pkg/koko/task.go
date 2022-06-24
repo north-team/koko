@@ -22,7 +22,7 @@ func uploadRemainReplay(jmsService *service.JMService) {
 		logger.Error(err)
 		return
 	}
-	replayStorage := proxy.NewReplayStorage(jmsService, &conf)
+	replayStorage := proxy.NewReplayStorage("replay", jmsService, &conf)
 	allRemainFiles := make(map[string]RemainReplay)
 	_ = filepath.Walk(replayDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
@@ -75,6 +75,44 @@ func uploadRemainReplay(jmsService *service.JMService) {
 	}
 	logger.Info("Upload remain replay done")
 }
+
+// uploadRemainFtpLogFile 上传遗留的ftp文件
+func uploadRemainFtpLogFile(jmsService *service.JMService) {
+	filesDir := config.GetConf().FilesFolderPath
+	conf, err := jmsService.GetTerminalConfig()
+	if err != nil {
+		logger.Error(err)
+		return
+	}
+	replayStorage := proxy.NewReplayStorage("file", jmsService, &conf)
+	allRemainFiles := make(map[string]string)
+	_ = filepath.Walk(filesDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		var sid string
+		filename := info.Name()
+		if len(filename) == 36 {
+			sid = filename
+		}
+		if sid != "" {
+			allRemainFiles[sid] = path
+		}
+		return nil
+	})
+
+	for _, path := range allRemainFiles {
+		target, _ := filepath.Rel(filesDir, path)
+		logger.Infof("Upload remain FTP file: %s, type: %s", path, replayStorage.TypeName())
+		if err2 := replayStorage.Upload(path, target); err2 != nil {
+			logger.Errorf("Upload remain FTP file %s failed: %s", path, err2)
+			continue
+		}
+		_ = os.Remove(path)
+	}
+	logger.Info("Upload remain replay done")
+}
+
 
 // keepHeartbeat 保持心跳
 func keepHeartbeat(jmsService *service.JMService) {

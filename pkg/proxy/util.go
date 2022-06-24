@@ -22,7 +22,7 @@ type CommandStorage interface {
 	StorageType
 }
 
-func NewReplayStorage(jmsService *service.JMService, conf *model.TerminalConfig) ReplayStorage {
+func NewReplayStorage(fileType string, jmsService *service.JMService, conf *model.TerminalConfig) ReplayStorage {
 	cf := conf.ReplayStorage
 	tp, ok := cf["TYPE"]
 	if !ok {
@@ -143,7 +143,14 @@ func NewReplayStorage(jmsService *service.JMService, conf *model.TerminalConfig)
 	case "null":
 		return storage.NewNullStorage()
 	default:
-		return storage.ServerStorage{StorageType: "server", JmsService: jmsService}
+		switch fileType {
+		case "replay":
+			return storage.ServerStorage{StorageType: "server", JmsService: jmsService, FileType: "replay"}
+		case "file":
+			return storage.ServerStorage{StorageType: "server", JmsService: jmsService, FileType: "file"}
+		default:
+			return storage.NewNullStorage()
+		}
 	}
 }
 
