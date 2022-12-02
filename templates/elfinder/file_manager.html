@@ -13,6 +13,23 @@
     <link rel="stylesheet" type="text/css" media="screen" href="/koko/static/plugins/elfinder/css/theme-gray.css">
     <script type="text/javascript" src="/koko/static/js/koko.js"></script>
     <script type="text/javascript" charset="utf-8">
+        // 这里检查是否能使用 web sftp
+        var port = document.location.port ? ":" + document.location.port : "";
+        var baseUrl = document.location.protocol + "//" + document.location.hostname + port
+        $.ajax({
+            url: baseUrl + "/api/v1/acls/connect/permissions/",
+            data: {"login_type": "WEB_SFTP"},
+            contentType: "application/json",
+        }).done(function(resp) {
+            if (resp.error) {
+                alert(resp.error)
+                window.close()
+            }
+        }).fail(function() {
+            window.close()
+        });
+    </script>
+    <script type="text/javascript" charset="utf-8">
         var urlParams = new URLSearchParams(window.location.search);
         var scheme = document.location.protocol == "https:" ? "wss" : "ws";
         var port = document.location.port ? ":" + document.location.port : "";

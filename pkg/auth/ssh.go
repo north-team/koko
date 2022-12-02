@@ -42,7 +42,7 @@ func SSHPasswordAndPublicKeyAuth(jmsService *service.JMService) SSHAuthFunc {
 			userClient := service.NewUserClient(
 				service.UserClientUsername(username),
 				service.UserClientRemoteAddr(remoteAddr),
-				service.UserClientLoginType("T"),
+				service.UserClientLoginType("SSH_CLI"),
 				service.UserClientHttpClient(&newClient),
 			)
 			userAuthClient = &UserAuthClient{
