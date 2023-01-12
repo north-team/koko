@@ -53,9 +53,10 @@ RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list \
 
 WORKDIR /opt/koko
 COPY ./db2ese_t.lic ./db2ese_t.lic
-RUN wget https://f2c-north-rel.oss-cn-qingdao.aliyuncs.com/2.0/north/jumpserver/v11.5.5_linuxx64_server_dec.tar.gz \
-    && tar -zxf v11.5.5_linuxx64_server_dec.tar.gz \
-    && rm -f v11.5.5_linuxx64_server_dec.tar.gz \
+COPY ./v11.5.8_linuxx64_server_dec.tar.gz ./v11.5.8_linuxx64_server_dec.tar.gz
+#RUN wget https://f2c-north-rel.oss-cn-qingdao.aliyuncs.com/2.0/north/jumpserver/v11.5.5_linuxx64_server_dec.tar.gz \
+RUN tar -zxf v11.5.8_linuxx64_server_dec.tar.gz \
+    && rm -f v11.5.8_linuxx64_server_dec.tar.gz \
     && cd server_dec \
     && sh install.sh \
     && sh userGroupAdd.sh
